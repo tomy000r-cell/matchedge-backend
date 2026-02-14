@@ -1,41 +1,30 @@
-const express = require('express');
-const TelegramBot = require('node-telegram-bot-api');
+const express = require("express");
+const TelegramBot = require("node-telegram-bot-api");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-/* ================================
-   🔐 REMPLACE UNIQUEMENT TON TOKEN
-================================ */
-const token = '8574126323:AAEuUPVHPRdRe3qwZe7eMOl2zAY4r22yNik';
+// ✅ TON TOKEN (comme tu l’as demandé)
+const token = "8574126323:AAEuUPVHPRdRe3qwZe7eMOl2zAY4r22yNik";
 
-/* ================================
-   📢 METS LE @ EXACT DE TON CANAL
-   (ex: @MatchEdgeOfficial)
-================================ */
-const CHANNEL_USERNAME = '@MatchEdgeOfficial';
-
+// Création du bot
 const bot = new TelegramBot(token, { polling: true });
 
-/* ================================
-   🚀 SERVEUR EXPRESS
-================================ */
+// ===============================
+// ROUTES EXPRESS
+// ===============================
 
-app.get('/', (req, res) => {
-  res.send('MatchEdge Backend is running 🚀');
+app.get("/", (req, res) => {
+  res.send("🚀 MatchEdge Backend is running");
 });
 
-app.get('/ping', (req, res) => {
+app.get("/ping", (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.listen(PORT, () => {
-  console.log("Server running on http://localhost:3000");
-});
-
-/* ================================
-   🤖 COMMANDES TELEGRAM
-================================ */
+// ===============================
+// COMMANDES TELEGRAM
+// ===============================
 
 // /start
 bot.onText(/\/start/, (msg) => {
@@ -56,8 +45,7 @@ bot.onText(/\/help/, (msg) => {
     "📋 Commandes disponibles :\n\n" +
     "/start - Démarrer le bot\n" +
     "/help - Voir les commandes\n" +
-    "/ping - Tester le bot\n" +
-    "/post - Publier dans le canal"
+    "/ping - Tester le bot"
   );
 });
 
@@ -66,26 +54,20 @@ bot.onText(/\/ping/, (msg) => {
   bot.sendMessage(msg.chat.id, "✅ Bot opérationnel.");
 });
 
-// /post
-bot.onText(/\/post (.+)/, (msg, match) => {
-  const textToPost = match[1];
-
-  bot.sendMessage(CHANNEL_USERNAME, textToPost)
-    .then(() => {
-      bot.sendMessage(msg.chat.id, "✅ Message publié dans le canal.");
-    })
-    .catch((error) => {
-      bot.sendMessage(msg.chat.id, "❌ Erreur de publication.");
-      console.log(error);
-    });
-});
-
 // Message normal
-bot.on('message', (msg) => {
-  if (msg.text && !msg.text.startsWith('/')) {
+bot.on("message", (msg) => {
+  if (msg.text && !msg.text.startsWith("/")) {
     bot.sendMessage(
       msg.chat.id,
       "📌 Merci pour ton message.\nLes analyses arrivent bientôt 🔥"
     );
   }
+});
+
+// ===============================
+// LANCEMENT SERVEUR
+// ===============================
+
+app.listen(PORT, () => {
+  console.log(✅ Server running on port ${PORT});
 });
