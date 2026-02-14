@@ -8,12 +8,12 @@ const bot = new TelegramBot(TOKEN, { polling: true });
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Route test
+// Route test Render
 app.get('/', (req, res) => {
   res.send('Bot is running');
 });
 
-// Lancement serveur
+// Démarrage serveur
 app.listen(PORT, () => {
   console.log(Server running on port ${PORT});
 });
