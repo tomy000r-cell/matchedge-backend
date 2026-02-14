@@ -8,15 +8,18 @@ const bot = new TelegramBot(TOKEN, { polling: true });
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Route test
 app.get('/', (req, res) => {
   res.send('Bot is running');
 });
 
+// Lancement serveur
 app.listen(PORT, () => {
   console.log(Server running on port ${PORT});
 });
 
+// Réponse Telegram
 bot.on('message', (msg) => {
   const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "Bot opérationnel ✅");
+  bot.sendMessage(chatId, 'Bot opérationnel ✅');
 });
