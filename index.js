@@ -1,22 +1,26 @@
 const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 
-const TOKEN = "8574126323:AAEuUPVHPRdRe3qwZe7eMOl2zAY4r22yNik";
-
-const bot = new TelegramBot(TOKEN, { polling: true });
+const token = process.env.BOT_TOKEN;
+const url = process.env.RENDER_EXTERNAL_URL;
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+app.use(express.json());
 
-app.get('/', function(req, res) {
-  res.send('Bot is running');
+const bot = new TelegramBot(token);
+
+bot.setWebHook(${url}/bot${token});
+
+app.post(/bot${token}, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
 });
 
-app.listen(PORT, function() {
-  console.log("Server running on port " + PORT);
+bot.on('message', (msg) => {
+  bot.sendMessage(msg.chat.id, "Bot actif 🚀");
 });
 
-bot.on('message', function(msg) {
-  const chatId = msg.chat.id;
-  bot.sendMessage(chatId, "Bot operationnel");
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(Server running on port ${PORT});
 });
