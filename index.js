@@ -1,42 +1,39 @@
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 
-const token = process.env.BOT_TOKEN;
-const url = process.env.RENDER_EXTERNAL_URL;
-const PORT = process.env.PORT || 10000;
-
-if (!token) {
-  console.error("❌ BOT_TOKEN manquant");
-  process.exit(1);
-}
-
-if (!url) {
-  console.error("❌ RENDER_EXTERNAL_URL manquant");
-  process.exit(1);
-}
-
 const app = express();
 app.use(express.json());
 
+const token = process.env.BOT_TOKEN;
+const url = process.env.RENDER_EXTERNAL_URL;
+
 const bot = new TelegramBot(token);
 
-// Route webhook FIXE (pas de ${}, pas de regex)
-app.post("/telegram", (req, res) => {
+app.get("/", (req, res) => {
+  res.send("🚀 Bot is running");
+});
+
+// Webhook route
+app.post(/bot${token}, (req, res) => {
   bot.processUpdate(req.body);
   res.sendStatus(200);
 });
 
-// Activation webhook
-bot.setWebHook(url + "/telegram");
-
+// Command /start
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "🔥 MatchEdge Bot actif !");
+  bot.sendMessage(
+    msg.chat.id,
+    "🔥 Bienvenue sur MatchEdgeBot !\n\nLe bot fonctionne correctement."
+  );
 });
 
-bot.onText(/\/menu/, (msg) => {
-  bot.sendMessage(msg.chat.id, "📊 Menu principal bientôt disponible...");
-});
+// Lancement serveur
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, async () => {
+  console.log(🚀 Server running on port ${PORT});
 
-app.listen(PORT, () => {
-  console.log("🚀 Server running on port " + PORT);
+  if (url) {
+    await bot.setWebHook(${url}/bot${token});
+    console.log("✅ Webhook configuré");
+  }
 });
