@@ -1,20 +1,22 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 
+console.log("=== DEMARRAGE SCRIPT ===");
+
 if (!process.env.BOT_TOKEN) {
-  console.error('BOT_TOKEN manquant');
+  console.log("BOT_TOKEN MANQUANT");
   process.exit(1);
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 bot.start((ctx) => {
-  ctx.reply('BOT OK ✅');
+  console.log("MESSAGE /start RECU");
+  ctx.reply("BOT OK ✅");
 });
 
-bot.launch()
-  .then(() => console.log('Bot lancé'))
-  .catch((err) => console.error(err));
-
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+bot.launch().then(() => {
+  console.log("=== BOT LANCE AVEC SUCCES ===");
+}).catch(err => {
+  console.log("ERREUR LANCEMENT:", err);
+});
