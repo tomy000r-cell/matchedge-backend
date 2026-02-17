@@ -1,120 +1,86 @@
-const { Telegraf, Markup } = require("telegraf");
-const axios = require("axios");
-const express = require("express");
+require(‘dotenv’).config();
+const express = require(“express”);
+const { Telegraf, Markup } = require(“telegraf”);
+const axios = require(“axios”);
 
 const app = express();
+const bot = new Telegraf(process.env.BOT_TOKEN);
 
-const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
+let requestCount = 0;
 
-// ===============================
-// Vérification variables
-// ===============================
-if (!process.env.TELEGRAM_TOKEN || !process.env.API_FOOTBALL_KEY) {
-  console.error("❌ Variables d'environnement manquantes !");
-  process.exit(1);
-}
+app.get(”/”, (req, res) => {
+res.send(“Bot actif 🚀”);
+});
 
-// ===============================
-// MENU PRINCIPAL
-// ===============================
-function sendMenu(ctx) {
-  return ctx.reply(
-    "🔥 MatchEdge Bot prêt !",
-    Markup.keyboard([["🔥 Matchs Live"]])
-      .resize()
-      .oneTime(false)
-  );
-}
+app.listen(process.env.PORT || 3000, () => {
+console.log(“Serveur actif”);
+});
 
 bot.start((ctx) => {
-  sendMenu(ctx);
+ctx.reply(
+“🔮 Bot Prédictions 2025-2026\n\nClique pour voir les prédictions officielles.”,
+Markup.keyboard([[“🔮 Prédictions du jour”]]).resize()
+);
 });
 
-bot.on("message", (ctx) => {
-  if (ctx.message.text === "🔥 Matchs Live") return;
-  if (ctx.message.text === "/start") return;
-  sendMenu(ctx);
-});
+bot.hears(“🔮 Prédictions du jour”, async (ctx) => {
+try {
+if (!process.env.FOOTBALL_API_KEY) {
+  return ctx.reply("❌ Clé API manquante.");
+}
 
-// ===============================
-// MATCHS LIVE
-// ===============================
-bot.hears("🔥 Matchs Live", async (ctx) => {
-  try {
-    await ctx.reply("⏳ Recherche des matchs...");
+const today = new Date().toISOString().split("T")[0];
 
-    let response;
-
-    try {
-      response = await axios.get(
-        "https://v3.football.api-sports.io/fixtures",
-        {
-          params: { live: "all" },
-          headers: {
-            "x-apisports-key": process.env.API_FOOTBALL_KEY,
-          },
-        }
-      );
-    } catch (err) {
-      console.log("⚠️ Live bloqué, fallback date...");
+// 1️⃣ Récupérer matchs du jour
+const fixtures = await axios.get(
+  `https://v3.football.api-sports.io/fixtures?date=${today}`,
+  {
+    headers: {
+      "x-apisports-key": process.env.FOOTBALL_API_KEY
     }
-
-    let matches = response?.data?.response || [];
-
-    if (!matches || matches.length === 0) {
-      const today = new Date().toISOString().split("T")[0];
-
-      const fallback = await axios.get(
-        "https://v3.football.api-sports.io/fixtures",
-        {
-          params: { date: today },
-          headers: {
-            "x-apisports-key": process.env.API_FOOTBALL_KEY,
-          },
-        }
-      );
-
-      matches = fallback.data.response;
-    }
-
-    if (!matches || matches.length === 0) {
-      return ctx.reply("⚽ Aucun match trouvé aujourd’hui.");
-    }
-
-    let message = "🔥 MATCHS 🔥\n\n";
-
-    matches.slice(0, 10).forEach((match) => {
-      const home = match.teams.home.name;
-      const away = match.teams.away.name;
-      const scoreHome = match.goals.home ?? 0;
-      const scoreAway = match.goals.away ?? 0;
-      const minute = match.fixture.status.elapsed ?? "NS";
-
-      message += `🏟 ${home} ${scoreHome} - ${scoreAway} ${away} (${minute}')\n`;
-    });
-
-    ctx.reply(message);
-  } catch (error) {
-    console.error(error.response?.data || error.message);
-    ctx.reply("❌ Erreur récupération des matchs.");
   }
+);
+
+requestCount++;
+
+const matches = fixtures.data.response.slice(0, 5);
+
+if (matches.length === 0) {
+  return ctx.reply("⚠️ Aucun match aujourd'hui.");
+}
+
+let message = "🔮 PRÉDICTIONS OFFICIELLES\n\n";
+
+for (const match of matches) {
+
+  const prediction = await axios.get(
+    `https://v3.football.api-sports.io/predictions?fixture=${match.fixture.id}`,
+    {
+      headers: {
+        "x-apisports-key": process.env.FOOTBALL_API_KEY
+      }
+    }
+  );
+
+  requestCount++;
+
+  const data = prediction.data.response[0];
+
+  if (!data) continue;
+
+  message += `${match.teams.home.name} vs ${match.teams.away.name}\n`;
+  message += `🏠 ${data.predictions.percent.home}%\n`;
+  message += `🤝 ${data.predictions.percent.draw}%\n`;
+  message += `🚀 ${data.predictions.percent.away}%\n\n`;
+}
+
+message += `📊 Requêtes utilisées : ${requestCount}/100`;
+
+ctx.reply(message);
+} catch (error) {
+console.log(error.response?.data || error.message);
+ctx.reply(“❌ Erreur API ou limite atteinte.”);
+}
 });
 
-// ===============================
-// Serveur Express
-// ===============================
-app.get("/", (req, res) => {
-  res.send("MatchEdge Bot actif 🚀");
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log("🌍 Serveur actif sur port " + PORT);
-});
-
-// ===============================
 bot.launch();
-console.log("✅ Bot Telegram lancé");
-
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
