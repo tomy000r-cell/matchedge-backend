@@ -14,6 +14,9 @@ const bot = new TelegramBot(token, { polling: true });
 let cachedPredictions = null;
 let lastUpdate = 0;
 
+let apiRequestCount = 0;
+let currentDate = new Date().toISOString().split("T")[0];
+
 // 🔹 MENU
 const menu = {
   reply_markup: {
@@ -22,6 +25,16 @@ const menu = {
     one_time_keyboard: false
   }
 };
+
+// 🔹 RESET compteur chaque jour
+function resetCounterIfNewDay() {
+  const today = new Date().toISOString().split("T")[0];
+  if (today !== currentDate) {
+    currentDate = today;
+    apiRequestCount = 0;
+    console.log("🔄 Compteur réinitialisé pour le nouveau jour");
+  }
+}
 
 // 🔹 START
 bot.onText(/\/start/, (msg) => {
@@ -32,12 +45,19 @@ bot.onText(/\/start/, (msg) => {
   );
 });
 
-// 🔹 Fonction mise à jour cache (15 min)
+// 🔹 Fonction API avec compteur
 async function updatePredictions() {
+
+  resetCounterIfNewDay();
+
   const now = Date.now();
 
   if (cachedPredictions && now - lastUpdate < 15 * 60 * 1000) {
     return cachedPredictions;
+  }
+
+  if (apiRequestCount >= 100) {
+    throw new Error("Limite API atteinte");
   }
 
   const today = new Date().toISOString().split("T")[0];
@@ -51,14 +71,16 @@ async function updatePredictions() {
     }
   );
 
+  apiRequestCount++;
+  console.log(`📡 Requête API utilisée : ${apiRequestCount}/100`);
+
   cachedPredictions = response.data.response;
   lastUpdate = now;
 
-  console.log("✅ Cache mis à jour");
   return cachedPredictions;
 }
 
-// 🔹 Gestion des messages
+// 🔹 Gestion messages
 bot.on("message", async (msg) => {
 
   if (!msg.text || msg.text.startsWith("/")) return;
@@ -69,24 +91,34 @@ bot.on("message", async (msg) => {
       const predictions = await updatePredictions();
 
       if (!predictions || predictions.length === 0) {
-        return bot.sendMessage(msg.chat.id, "Aucune prédiction disponible aujourd'hui ❌");
+        return bot.sendMessage(msg.chat.id, "Aucune prédiction aujourd'hui ❌");
       }
 
       let message = "📊 PRÉDICTIONS DU JOUR\n\n";
 
       predictions.slice(0, 5).forEach(p => {
         message += `⚽ ${p.teams.home.name} vs ${p.teams.away.name}\n`;
-        message += `🔮 Gagnant probable: ${p.predictions.winner?.name || "Match équilibré"}\n`;
-        message += `📈 Probabilités: ${p.predictions.percent.home} | ${p.predictions.percent.draw} | ${p.predictions.percent.away}\n\n`;
+        message += `🔮 ${p.predictions.winner?.name || "Match équilibré"}\n`;
+        message += `📈 ${p.predictions.percent.home} | ${p.predictions.percent.draw} | ${p.predictions.percent.away}\n\n`;
       });
+
+      message += `\n📡 Requêtes API utilisées aujourd'hui : ${apiRequestCount}/100`;
 
       bot.sendMessage(msg.chat.id, message);
 
     } catch (error) {
+
+      if (error.message === "Limite API atteinte") {
+        return bot.sendMessage(
+          msg.chat.id,
+          "⚠️ Limite de 100 requêtes API atteinte pour aujourd'hui."
+        );
+      }
+
       console.log("❌ ERREUR API:", error.response?.data || error.message);
-      bot.sendMessage(msg.chat.id, "Erreur API ⚠️ Vérifie ta clé API.");
+      bot.sendMessage(msg.chat.id, "Erreur API ⚠️ Vérifie ta clé.");
     }
   }
 });
 
-console.log("🤖 Bot démarré...");
+console.log("🤖 Bot démarré avec compteur API...");
