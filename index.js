@@ -1,4 +1,3 @@
-require("dotenv").config();
 const { Telegraf, Markup } = require("telegraf");
 const axios = require("axios");
 const express = require("express");
@@ -8,7 +7,7 @@ const app = express();
 const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
 
 // ===============================
-// Vérification variables Render
+// Vérification variables
 // ===============================
 if (!process.env.TELEGRAM_TOKEN || !process.env.API_FOOTBALL_KEY) {
   console.error("❌ Variables d'environnement manquantes !");
@@ -27,12 +26,10 @@ function sendMenu(ctx) {
   );
 }
 
-// Quand on clique sur DÉMARRER
 bot.start((ctx) => {
   sendMenu(ctx);
 });
 
-// Si l'utilisateur écrit autre chose → on renvoie le menu
 bot.on("message", (ctx) => {
   if (ctx.message.text === "🔥 Matchs Live") return;
   if (ctx.message.text === "/start") return;
@@ -48,7 +45,6 @@ bot.hears("🔥 Matchs Live", async (ctx) => {
 
     let response;
 
-    // Tentative LIVE
     try {
       response = await axios.get(
         "https://v3.football.api-sports.io/fixtures",
@@ -60,12 +56,11 @@ bot.hears("🔥 Matchs Live", async (ctx) => {
         }
       );
     } catch (err) {
-      console.log("⚠️ Live bloqué, fallback date du jour...");
+      console.log("⚠️ Live bloqué, fallback date...");
     }
 
     let matches = response?.data?.response || [];
 
-    // Si aucun live → fallback date du jour
     if (!matches || matches.length === 0) {
       const today = new Date().toISOString().split("T")[0];
 
@@ -106,7 +101,7 @@ bot.hears("🔥 Matchs Live", async (ctx) => {
 });
 
 // ===============================
-// Serveur Express (Render obligatoire)
+// Serveur Express
 // ===============================
 app.get("/", (req, res) => {
   res.send("MatchEdge Bot actif 🚀");
@@ -118,11 +113,8 @@ app.listen(PORT, () => {
 });
 
 // ===============================
-// Lancement bot
-// ===============================
 bot.launch();
 console.log("✅ Bot Telegram lancé");
 
-// Stop propre
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
