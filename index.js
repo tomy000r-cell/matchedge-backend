@@ -1,138 +1,113 @@
-const TelegramBot = require("node-telegram-bot-api");
+require("dotenv").config();
+const { Telegraf, Markup } = require("telegraf");
 const axios = require("axios");
 const express = require("express");
 
+const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
 const app = express();
 
-const token = process.env.TELEGRAM_TOKEN;
-const apiKey = process.env.API_FOOTBALL_KEY;
-
-if (!token) {
-  console.error("❌ TELEGRAM_TOKEN non défini !");
+// ===============================
+// Vérification des variables
+// ===============================
+if (!process.env.TELEGRAM_TOKEN || !process.env.API_FOOTBALL_KEY) {
+  console.error("❌ Variables d'environnement manquantes !");
   process.exit(1);
 }
 
-if (!apiKey) {
-  console.error("❌ API_FOOTBALL_KEY non définie !");
-  process.exit(1);
-}
+// ===============================
+// Menu principal
+// ===============================
+bot.start((ctx) => {
+  ctx.reply(
+    "🔥 MatchEdge Bot prêt !",
+    Markup.keyboard([["🔥 Matchs Live"]]).resize()
+  );
+});
 
-const bot = new TelegramBot(token, { polling: true });
-
-console.log("✅ Bot Telegram lancé");
-
-let apiRequestCount = 0;
-let lastResetDate = new Date().toDateString();
-
-function resetCounter() {
-  const today = new Date().toDateString();
-  if (today !== lastResetDate) {
-    apiRequestCount = 0;
-    lastResetDate = today;
-  }
-}
-
-async function getLiveMatches() {
-  resetCounter();
-
-  if (apiRequestCount >= 95) {
-    return [{ error: "⚠️ Limite API presque atteinte." }];
-  }
-
+// ===============================
+// MATCHS LIVE
+// ===============================
+bot.hears("🔥 Matchs Live", async (ctx) => {
   try {
-    const liveRes = await axios.get(
-      "https://v3.football.api-sports.io/fixtures?live=all",
-      {
-        headers: { "x-apisports-key": apiKey }
-      }
-    );
+    await ctx.reply("⏳ Recherche des matchs...");
 
-    apiRequestCount++;
+    let response;
 
-    const liveMatches = liveRes.data.response.filter(match => {
-      const status = match.fixture.status.short;
-      return ["1H", "2H", "HT", "ET", "P", "LIVE"].includes(status);
-    });
-
-    if (!liveMatches.length) return [];
-
-    let results = [];
-
-    for (let match of liveMatches.slice(0, 5)) {
-      if (apiRequestCount >= 100) break;
-
-      const predRes = await axios.get(
-        `https://v3.football.api-sports.io/predictions?fixture=${match.fixture.id}`,
+    // 1️⃣ Tentative LIVE
+    try {
+      response = await axios.get(
+        "https://v3.football.api-sports.io/fixtures",
         {
-          headers: { "x-apisports-key": apiKey }
+          params: { live: "all" },
+          headers: {
+            "x-apisports-key": process.env.API_FOOTBALL_KEY,
+          },
+        }
+      );
+    } catch (err) {
+      console.log("⚠️ Live bloqué, on teste date du jour...");
+    }
+
+    let matches = response?.data?.response || [];
+
+    // 2️⃣ Si live vide → fallback sur date du jour
+    if (!matches || matches.length === 0) {
+      const today = new Date().toISOString().split("T")[0];
+
+      const fallback = await axios.get(
+        "https://v3.football.api-sports.io/fixtures",
+        {
+          params: { date: today },
+          headers: {
+            "x-apisports-key": process.env.API_FOOTBALL_KEY,
+          },
         }
       );
 
-      apiRequestCount++;
-
-      if (predRes.data.response.length > 0) {
-        results.push({
-          home: match.teams.home.name,
-          away: match.teams.away.name,
-          minute: match.fixture.status.elapsed || 0,
-          prediction:
-            predRes.data.response[0].predictions.winner?.name ||
-            "Indécis"
-        });
-      }
+      matches = fallback.data.response;
     }
 
-    return results;
-
-  } catch (err) {
-    console.error("Erreur API:", err.response?.data || err.message);
-    return [{ error: "❌ Erreur API." }];
-  }
-}
-
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "🔥 MatchEdge Bot prêt !", {
-    reply_markup: {
-      keyboard: [["🔥 Matchs Live"]],
-      resize_keyboard: true
-    }
-  });
-});
-
-bot.on("message", async (msg) => {
-  if (msg.text === "🔥 Matchs Live") {
-    bot.sendMessage(msg.chat.id, "⏳ Recherche des matchs live...");
-
-    const data = await getLiveMatches();
-
-    if (!data.length) {
-      return bot.sendMessage(
-        msg.chat.id,
-        "⚽ Aucun match en cours actuellement."
-      );
+    if (!matches || matches.length === 0) {
+      return ctx.reply("⚽ Aucun match trouvé aujourd’hui.");
     }
 
-    if (data[0]?.error) {
-      return bot.sendMessage(msg.chat.id, data[0].error);
-    }
+    let message = "🔥 MATCHS EN COURS / AUJOURD'HUI 🔥\n\n";
 
-    for (let match of data) {
-      bot.sendMessage(
-        msg.chat.id,
-        `🔥 ${match.home} vs ${match.away}
-⏱ ${match.minute}'
-🎯 Pronostic : ${match.prediction}`
-      );
-    }
+    matches.slice(0, 10).forEach((match) => {
+      const home = match.teams.home.name;
+      const away = match.teams.away.name;
+      const scoreHome = match.goals.home ?? 0;
+      const scoreAway = match.goals.away ?? 0;
+      const minute = match.fixture.status.elapsed ?? "NS";
+
+      message += `🏟 ${home} ${scoreHome} - ${scoreAway} ${away} (${minute}')\n`;
+    });
+
+    ctx.reply(message);
+  } catch (error) {
+    console.error(error.response?.data || error.message);
+    ctx.reply("❌ Erreur récupération des matchs.");
   }
 });
 
-/* 🔵 Express obligatoire pour Render */
+// ===============================
+// Serveur Render
+// ===============================
 app.get("/", (req, res) => {
-  res.send("MatchEdge Bot running");
+  res.send("Bot actif 🚀");
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🌍 Serveur actif sur port ${PORT}`);
+  console.log("🌍 Serveur actif sur port " + PORT);
 });
+
+// ===============================
+// Lancement bot
+// ===============================
+bot.launch();
+console.log("✅ Bot Telegram lancé");
+
+// Stop propre si crash
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
