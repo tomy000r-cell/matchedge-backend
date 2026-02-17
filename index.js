@@ -6,49 +6,66 @@ const apiKey = process.env.API_FOOTBALL_KEY;
 
 const bot = new TelegramBot(token, { polling: true });
 
-// MENU AVEC 1 BOUTON
+let cachedPredictions = null;
+let lastUpdate = 0;
+
+// MENU
 const menu = {
   reply_markup: {
-    keyboard: [[{ text: "📊 Prédictions du jour" }]],
+    keyboard: [[{ text: "📊 Prédictions Live" }]],
     resize_keyboard: true
   }
 };
 
 bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, "Bienvenue sur MatchEdge 🚀", menu);
+  bot.sendMessage(msg.chat.id, "Bienvenue 🚀", menu);
 });
 
-// QUAND ON CLIQUE SUR LE BOUTON
+// Fonction pour mettre à jour cache
+async function updatePredictions() {
+  const now = Date.now();
+
+  // 15 minutes
+  if (now - lastUpdate < 15 * 60 * 1000 && cachedPredictions) {
+    return cachedPredictions;
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const response = await axios.get(
+    `https://v3.football.api-sports.io/predictions?date=${today}`,
+    {
+      headers: { 'x-apisports-key': apiKey }
+    }
+  );
+
+  cachedPredictions = response.data.response;
+  lastUpdate = now;
+
+  return cachedPredictions;
+}
+
 bot.on('message', async (msg) => {
-  if (msg.text === "📊 Prédictions du jour") {
+  if (msg.text === "📊 Prédictions Live") {
     try {
-      const today = new Date().toISOString().split('T')[0];
-
-      const response = await axios.get(
-        `https://v3.football.api-sports.io/predictions?date=${today}`,
-        {
-          headers: { 'x-apisports-key': apiKey }
-        }
-      );
-
-      const predictions = response.data.response;
+      const predictions = await updatePredictions();
 
       if (!predictions.length) {
-        return bot.sendMessage(msg.chat.id, "Aucune prédiction aujourd'hui ❌");
+        return bot.sendMessage(msg.chat.id, "Aucun match aujourd'hui ❌");
       }
 
-      let message = "📊 Prédictions du jour :\n\n";
+      let message = "📊 Prédictions en cours :\n\n";
 
       predictions.slice(0, 5).forEach(p => {
         message += `⚽ ${p.teams.home.name} vs ${p.teams.away.name}\n`;
         message += `🔮 ${p.predictions.winner?.name || "Match serré"}\n`;
-        message += `📈 Probabilité: ${p.predictions.percent.home} / ${p.predictions.percent.draw} / ${p.predictions.percent.away}\n\n`;
+        message += `📈 ${p.predictions.percent.home} / ${p.predictions.percent.draw} / ${p.predictions.percent.away}\n\n`;
       });
 
       bot.sendMessage(msg.chat.id, message);
 
-    } catch (error) {
-      console.log(error);
+    } catch (err) {
+      console.log(err);
       bot.sendMessage(msg.chat.id, "Erreur API ⚠️");
     }
   }
