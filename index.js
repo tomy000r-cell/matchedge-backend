@@ -18,7 +18,7 @@ console.log(“Serveur actif”);
 
 bot.start((ctx) => {
 ctx.reply(
-“🔮 Bot Prédictions 2025-2026\n\nClique pour voir les prédictions officielles.”,
+“🔮 Bot Prédictions 2025-2026 prêt !”,
 Markup.keyboard([[“🔮 Prédictions du jour”]]).resize()
 );
 });
@@ -31,8 +31,7 @@ if (!process.env.FOOTBALL_API_KEY) {
 
 const today = new Date().toISOString().split("T")[0];
 
-// 1️⃣ Récupérer matchs du jour
-const fixtures = await axios.get(
+const fixturesRes = await axios.get(
   `https://v3.football.api-sports.io/fixtures?date=${today}`,
   {
     headers: {
@@ -43,44 +42,62 @@ const fixtures = await axios.get(
 
 requestCount++;
 
-const matches = fixtures.data.response.slice(0, 5);
+const matches = fixturesRes?.data?.response;
 
-if (matches.length === 0) {
+if (!matches || matches.length === 0) {
   return ctx.reply("⚠️ Aucun match aujourd'hui.");
 }
 
 let message = "🔮 PRÉDICTIONS OFFICIELLES\n\n";
 
-for (const match of matches) {
+const limitedMatches = matches.slice(0, 3);
 
-  const prediction = await axios.get(
-    `https://v3.football.api-sports.io/predictions?fixture=${match.fixture.id}`,
-    {
-      headers: {
-        "x-apisports-key": process.env.FOOTBALL_API_KEY
+for (const match of limitedMatches) {
+
+  try {
+
+    const predictionRes = await axios.get(
+      `https://v3.football.api-sports.io/predictions?fixture=${match.fixture.id}`,
+      {
+        headers: {
+          "x-apisports-key": process.env.FOOTBALL_API_KEY
+        }
       }
+    );
+
+    requestCount++;
+
+    const predictionData = predictionRes?.data?.response;
+
+    if (!predictionData || predictionData.length === 0) {
+      continue;
     }
-  );
 
-  requestCount++;
+    const percent = predictionData[0]?.predictions?.percent;
 
-  const data = prediction.data.response[0];
+    if (!percent) continue;
 
-  if (!data) continue;
+    message += `${match.teams.home.name} vs ${match.teams.away.name}\n`;
+    message += `🏠 ${percent.home}\n`;
+    message += `🤝 ${percent.draw}\n`;
+    message += `🚀 ${percent.away}\n\n`;
 
-  message += `${match.teams.home.name} vs ${match.teams.away.name}\n`;
-  message += `🏠 ${data.predictions.percent.home}%\n`;
-  message += `🤝 ${data.predictions.percent.draw}%\n`;
-  message += `🚀 ${data.predictions.percent.away}%\n\n`;
+  } catch (err) {
+    console.log("Erreur prediction:", err.message);
+  }
 }
 
 message += `📊 Requêtes utilisées : ${requestCount}/100`;
 
 ctx.reply(message);
 } catch (error) {
-console.log(error.response?.data || error.message);
+console.log(“Erreur globale:”, error.message);
 ctx.reply(“❌ Erreur API ou limite atteinte.”);
 }
 });
 
 bot.launch();
+
+process.on(“unhandledRejection”, (err) => {
+console.error(“Unhandled:”, err);
+});
