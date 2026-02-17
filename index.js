@@ -5,7 +5,7 @@ const token = process.env.BOT_TOKEN;
 const apiKey = process.env.API_FOOTBALL_KEY;
 
 if (!token || !apiKey) {
-  console.log("❌ Variables manquantes !");
+  console.log("❌ Variables manquantes");
   process.exit(1);
 }
 
@@ -14,7 +14,6 @@ const bot = new TelegramBot(token, { polling: true });
 let apiRequestCount = 0;
 let currentDate = new Date().toLocaleDateString('en-CA');
 
-// 🔹 Reset compteur chaque jour
 function resetCounter() {
   const today = new Date().toLocaleDateString('en-CA');
   if (today !== currentDate) {
@@ -23,16 +22,13 @@ function resetCounter() {
   }
 }
 
-// 🔹 Fonction principale
-async function getPredictions() {
+async function getLivePredictions() {
 
   resetCounter();
 
-  const today = new Date().toLocaleDateString('en-CA');
-
-  // 1️⃣ On récupère les matchs du jour
-  const fixturesRes = await axios.get(
-    `https://v3.football.api-sports.io/fixtures?date=${today}`,
+  // 1️⃣ Matchs live
+  const liveRes = await axios.get(
+    `https://v3.football.api-sports.io/fixtures?live=all`,
     {
       headers: { "x-apisports-key": apiKey }
     }
@@ -40,16 +36,13 @@ async function getPredictions() {
 
   apiRequestCount++;
 
-  const fixtures = fixturesRes.data.response;
+  const liveMatches = liveRes.data.response;
 
-  if (!fixtures.length) return [];
-
-  const topFixtures = fixtures.slice(0, 5);
+  if (!liveMatches.length) return [];
 
   let results = [];
 
-  // 2️⃣ On récupère prédictions pour chaque match
-  for (let match of topFixtures) {
+  for (let match of liveMatches.slice(0, 5)) {
 
     if (apiRequestCount >= 100) break;
 
@@ -70,30 +63,24 @@ async function getPredictions() {
   return results;
 }
 
-// 🔹 MENU
 const menu = {
   reply_markup: {
-    keyboard: [[{ text: "📊 Prédictions du jour" }]],
+    keyboard: [[{ text: "🔥 Matchs Live" }]],
     resize_keyboard: true
   }
 };
 
-// 🔹 START = envoie direct les prédictions
-bot.onText(/\/start/, async (msg) => {
-
-  const chatId = msg.chat.id;
-
-  bot.sendMessage(chatId, "Bienvenue sur MatchEdge 🚀", menu);
+async function sendLive(chatId) {
 
   try {
 
-    const predictions = await getPredictions();
+    const predictions = await getLivePredictions();
 
     if (!predictions.length) {
-      return bot.sendMessage(chatId, "Aucune prédiction disponible aujourd'hui ❌");
+      return bot.sendMessage(chatId, "⚽ Aucun match en cours actuellement.", menu);
     }
 
-    let message = "📊 PRÉDICTIONS DU JOUR\n\n";
+    let message = "🔥 MATCHS LIVE AVEC PRÉDICTIONS\n\n";
 
     predictions.forEach(p => {
       message += `⚽ ${p.teams.home.name} vs ${p.teams.away.name}\n`;
@@ -103,46 +90,26 @@ bot.onText(/\/start/, async (msg) => {
 
     message += `\n📡 Requêtes utilisées : ${apiRequestCount}/100`;
 
-    bot.sendMessage(chatId, message);
+    bot.sendMessage(chatId, message, menu);
 
   } catch (err) {
     console.log(err.response?.data || err.message);
-    bot.sendMessage(chatId, "Erreur API ⚠️");
+    bot.sendMessage(chatId, "❌ Erreur API", menu);
   }
+}
+
+// 🔹 Dès que l'utilisateur clique START
+bot.onText(/\/start/, async (msg) => {
+  await sendLive(msg.chat.id);
 });
 
-// 🔹 Bouton
+// 🔹 Bouton live
 bot.on("message", async (msg) => {
-
   if (!msg.text || msg.text.startsWith("/")) return;
 
-  if (msg.text === "📊 Prédictions du jour") {
-
-    try {
-
-      const predictions = await getPredictions();
-
-      if (!predictions.length) {
-        return bot.sendMessage(msg.chat.id, "Aucune prédiction disponible aujourd'hui ❌");
-      }
-
-      let message = "📊 PRÉDICTIONS DU JOUR\n\n";
-
-      predictions.forEach(p => {
-        message += `⚽ ${p.teams.home.name} vs ${p.teams.away.name}\n`;
-        message += `🔮 ${p.predictions.winner?.name || "Match équilibré"}\n`;
-        message += `📈 ${p.predictions.percent.home} | ${p.predictions.percent.draw} | ${p.predictions.percent.away}\n\n`;
-      });
-
-      message += `\n📡 Requêtes utilisées : ${apiRequestCount}/100`;
-
-      bot.sendMessage(msg.chat.id, message);
-
-    } catch (err) {
-      console.log(err.response?.data || err.message);
-      bot.sendMessage(msg.chat.id, "Erreur API ⚠️");
-    }
+  if (msg.text === "🔥 Matchs Live") {
+    await sendLive(msg.chat.id);
   }
 });
 
-console.log("🤖 Bot lancé proprement.");
+console.log("🤖 Bot LIVE lancé");
