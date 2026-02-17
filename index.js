@@ -1,53 +1,32 @@
-const TelegramBot = require('node-telegram-bot-api');
-const axios = require('axios');
+const TelegramBot = require("node-telegram-bot-api");
+const axios = require("axios");
 
-const token = process.env.BOT_TOKEN;
+const token = process.env.TELEGRAM_TOKEN;
 const apiKey = process.env.API_FOOTBALL_KEY;
-
-if (!token || !apiKey) {
-  console.log("❌ Variables manquantes");
-  process.exit(1);
-}
 
 const bot = new TelegramBot(token, { polling: true });
 
 let apiRequestCount = 0;
-let currentDate = new Date().toLocaleDateString('en-CA');
+let lastResetDate = new Date().toDateString();
 
 function resetCounter() {
-  const today = new Date().toLocaleDateString('en-CA');
-  if (today !== currentDate) {
-    currentDate = today;
+  const today = new Date().toDateString();
+  if (today !== lastResetDate) {
     apiRequestCount = 0;
+    lastResetDate = today;
   }
 }
 
 async function getLivePredictions() {
-
   resetCounter();
 
-  // 1️⃣ Matchs live
-  const liveRes = await axios.get(
-    `https://v3.football.api-sports.io/fixtures?live=all`,
-    {
-      headers: { "x-apisports-key": apiKey }
-    }
-  );
+  if (apiRequestCount >= 95) {
+    return [{ error: "⚠️ Limite API gratuite presque atteinte (100/jour)." }];
+  }
 
-  apiRequestCount++;
-
-  const liveMatches = liveRes.data.response;
-
-  if (!liveMatches.length) return [];
-
-  let results = [];
-
-  for (let match of liveMatches.slice(0, 5)) {
-
-    if (apiRequestCount >= 100) break;
-
-    const predRes = await axios.get(
-      `https://v3.football.api-sports.io/predictions?fixture=${match.fixture.id}`,
+  try {
+    const liveRes = await axios.get(
+      "https://v3.football.api-sports.io/fixtures?live=all",
       {
         headers: { "x-apisports-key": apiKey }
       }
@@ -55,61 +34,75 @@ async function getLivePredictions() {
 
     apiRequestCount++;
 
-    if (predRes.data.response.length > 0) {
-      results.push(predRes.data.response[0]);
-    }
-  }
-
-  return results;
-}
-
-const menu = {
-  reply_markup: {
-    keyboard: [[{ text: "🔥 Matchs Live" }]],
-    resize_keyboard: true
-  }
-};
-
-async function sendLive(chatId) {
-
-  try {
-
-    const predictions = await getLivePredictions();
-
-    if (!predictions.length) {
-      return bot.sendMessage(chatId, "⚽ Aucun match en cours actuellement.", menu);
-    }
-
-    let message = "🔥 MATCHS LIVE AVEC PRÉDICTIONS\n\n";
-
-    predictions.forEach(p => {
-      message += `⚽ ${p.teams.home.name} vs ${p.teams.away.name}\n`;
-      message += `🔮 ${p.predictions.winner?.name || "Match équilibré"}\n`;
-      message += `📈 ${p.predictions.percent.home} | ${p.predictions.percent.draw} | ${p.predictions.percent.away}\n\n`;
+    const liveMatches = liveRes.data.response.filter(match => {
+      const s = match.fixture.status.short;
+      return ["1H", "2H", "HT", "ET", "P", "LIVE"].includes(s);
     });
 
-    message += `\n📡 Requêtes utilisées : ${apiRequestCount}/100`;
+    if (!liveMatches.length) {
+      return [];
+    }
 
-    bot.sendMessage(chatId, message, menu);
+    let results = [];
 
-  } catch (err) {
-    console.log(err.response?.data || err.message);
-    bot.sendMessage(chatId, "❌ Erreur API", menu);
+    for (let match of liveMatches.slice(0, 5)) {
+      if (apiRequestCount >= 100) break;
+
+      const predRes = await axios.get(
+        `https://v3.football.api-sports.io/predictions?fixture=${match.fixture.id}`,
+        {
+          headers: { "x-apisports-key": apiKey }
+        }
+      );
+
+      apiRequestCount++;
+
+      if (predRes.data.response.length > 0) {
+        results.push({
+          home: match.teams.home.name,
+          away: match.teams.away.name,
+          minute: match.fixture.status.elapsed,
+          prediction: predRes.data.response[0].predictions.winner?.name || "Indécis"
+        });
+      }
+    }
+
+    return results;
+
+  } catch (error) {
+    console.log(error.response?.data || error.message);
+    return [{ error: "Erreur API ❌" }];
   }
 }
 
-// 🔹 Dès que l'utilisateur clique START
-bot.onText(/\/start/, async (msg) => {
-  await sendLive(msg.chat.id);
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(msg.chat.id, "🤖 Bot démarré ! Clique sur 🔥 Matchs Live", {
+    reply_markup: {
+      keyboard: [["🔥 Matchs Live"]],
+      resize_keyboard: true
+    }
+  });
 });
 
-// 🔹 Bouton live
 bot.on("message", async (msg) => {
-  if (!msg.text || msg.text.startsWith("/")) return;
-
   if (msg.text === "🔥 Matchs Live") {
-    await sendLive(msg.chat.id);
+    bot.sendMessage(msg.chat.id, "⏳ Recherche des matchs en cours...");
+
+    const data = await getLivePredictions();
+
+    if (!data.length) {
+      return bot.sendMessage(msg.chat.id, "⚽ Aucun match en cours actuellement.");
+    }
+
+    if (data[0]?.error) {
+      return bot.sendMessage(msg.chat.id, data[0].error);
+    }
+
+    for (let match of data) {
+      bot.sendMessage(
+        msg.chat.id,
+        `🔥 ${match.home} vs ${match.away}\n⏱ ${match.minute}'\n🎯 Pronostic : ${match.prediction}`
+      );
+    }
   }
 });
-
-console.log("🤖 Bot LIVE lancé");
