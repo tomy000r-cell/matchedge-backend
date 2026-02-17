@@ -3,11 +3,12 @@ const { Telegraf, Markup } = require("telegraf");
 const axios = require("axios");
 const express = require("express");
 
-const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
 const app = express();
 
+const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
+
 // ===============================
-// Vérification des variables
+// Vérification variables Render
 // ===============================
 if (!process.env.TELEGRAM_TOKEN || !process.env.API_FOOTBALL_KEY) {
   console.error("❌ Variables d'environnement manquantes !");
@@ -15,13 +16,27 @@ if (!process.env.TELEGRAM_TOKEN || !process.env.API_FOOTBALL_KEY) {
 }
 
 // ===============================
-// Menu principal
+// MENU PRINCIPAL
 // ===============================
-bot.start((ctx) => {
-  ctx.reply(
+function sendMenu(ctx) {
+  return ctx.reply(
     "🔥 MatchEdge Bot prêt !",
-    Markup.keyboard([["🔥 Matchs Live"]]).resize()
+    Markup.keyboard([["🔥 Matchs Live"]])
+      .resize()
+      .oneTime(false)
   );
+}
+
+// Quand on clique sur DÉMARRER
+bot.start((ctx) => {
+  sendMenu(ctx);
+});
+
+// Si l'utilisateur écrit autre chose → on renvoie le menu
+bot.on("message", (ctx) => {
+  if (ctx.message.text === "🔥 Matchs Live") return;
+  if (ctx.message.text === "/start") return;
+  sendMenu(ctx);
 });
 
 // ===============================
@@ -33,7 +48,7 @@ bot.hears("🔥 Matchs Live", async (ctx) => {
 
     let response;
 
-    // 1️⃣ Tentative LIVE
+    // Tentative LIVE
     try {
       response = await axios.get(
         "https://v3.football.api-sports.io/fixtures",
@@ -45,12 +60,12 @@ bot.hears("🔥 Matchs Live", async (ctx) => {
         }
       );
     } catch (err) {
-      console.log("⚠️ Live bloqué, on teste date du jour...");
+      console.log("⚠️ Live bloqué, fallback date du jour...");
     }
 
     let matches = response?.data?.response || [];
 
-    // 2️⃣ Si live vide → fallback sur date du jour
+    // Si aucun live → fallback date du jour
     if (!matches || matches.length === 0) {
       const today = new Date().toISOString().split("T")[0];
 
@@ -71,7 +86,7 @@ bot.hears("🔥 Matchs Live", async (ctx) => {
       return ctx.reply("⚽ Aucun match trouvé aujourd’hui.");
     }
 
-    let message = "🔥 MATCHS EN COURS / AUJOURD'HUI 🔥\n\n";
+    let message = "🔥 MATCHS 🔥\n\n";
 
     matches.slice(0, 10).forEach((match) => {
       const home = match.teams.home.name;
@@ -91,10 +106,10 @@ bot.hears("🔥 Matchs Live", async (ctx) => {
 });
 
 // ===============================
-// Serveur Render
+// Serveur Express (Render obligatoire)
 // ===============================
 app.get("/", (req, res) => {
-  res.send("Bot actif 🚀");
+  res.send("MatchEdge Bot actif 🚀");
 });
 
 const PORT = process.env.PORT || 3000;
@@ -108,6 +123,6 @@ app.listen(PORT, () => {
 bot.launch();
 console.log("✅ Bot Telegram lancé");
 
-// Stop propre si crash
+// Stop propre
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
